@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PS5 Controller Tester</title>
+<style>
+:root{--bg:#0b0f1a;--card:#141a2b;--line:#252d45;--fg:#e8ecf8;--dim:#8b95b5;--acc:#4da3ff;--ok:#33d17a;--warn:#f5c211;--bad:#ff5c5c}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 -apple-system,system-ui,Segoe UI,sans-serif;padding:12px;padding-bottom:40px}
+h1{font-size:20px;margin:4px 0 12px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{position:relative}
+.badges{display:flex;flex-wrap:wrap;gap:6px}
+.badge{padding:3px 9px;border-radius:99px;font-size:12px;border:1px solid var(--line);color:var(--dim)}
+.badge.on{color:var(--ok);border-color:var(--ok)}
+.badge.off{color:var(--bad);border-color:var(--bad)}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px}
+.chip{padding:8px 4px;text-align:center;border-radius:8px;background:#0d1322;border:1px solid var(--line);font-size:13px;color:var(--dim);transition:background .05s}
+.chip.tested{border-color:var(--ok);color:var(--ok)}
+.chip.down{background:var(--acc);border-color:var(--acc);color:#001;font-weight:700}
+.sticks{display:flex;gap:12px;justify-content:space-around;flex-wrap:wrap}
+.stick{text-align:center;font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim)}
+canvas{background:#0d1322;border-radius:50%;border:1px solid var(--line);touch-action:none;max-width:100%}
+.card{position:absolute;left:0;top:0;box-sizing:border-box;margin:0;overflow:auto;transition:transform .18s}
+.card[hidden]{display:none}
+.card h2{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.card h2 button{cursor:pointer}
+.grip{margin-right:8px;letter-spacing:-2px;padding:2px 6px;border-radius:6px;background:#0d1322;color:var(--dim)}
+.card.moving{transition:none;z-index:10;opacity:.92;box-shadow:0 12px 32px rgba(0,0,0,.55);border-color:var(--acc)}
+.card.moving h2{cursor:grabbing}
+.ph{position:absolute;left:0;top:0;box-sizing:border-box;border-radius:14px;background:rgba(77,163,255,.16);border:1px dashed var(--acc);pointer-events:none;transition:transform .15s}
+.rz{position:absolute;right:2px;bottom:2px;width:22px;height:22px;cursor:nwse-resize;touch-action:none;
+  background:linear-gradient(135deg,transparent 55%,var(--dim) 55%,var(--dim) 62%,transparent 62%,transparent 74%,var(--dim) 74%,var(--dim) 81%,transparent 81%);opacity:.7}
+.hdr{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hdr button{margin:0}
+.bar{height:14px;background:#0d1322;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.bar>i{display:block;height:100%;width:0;background:var(--acc)}
+.row{display:flex;align-items:center;gap:10px;margin:6px 0}
+.row label{min-width:78px;color:var(--dim);font-size:13px}
+.row .bar{flex:1}
+.row span.v{min-width:44px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px}
+button{background:var(--acc);color:#001;border:0;border-radius:9px;padding:10px 14px;font-weight:600;font-size:14px;margin:3px 3px 3px 0}
+button.sec{background:#222b45;color:var(--fg)}
+button.bad{background:var(--bad)}
+button:disabled{opacity:.4}
+input[type=range]{flex:1}
+select,input[type=color]{background:#0d1322;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
+.batt{font-size:34px;font-weight:700}
+.note{color:var(--dim);font-size:12.5px;margin-top:8px}
+#touch{position:relative;background:#0d1322;border:1px solid var(--line);border-radius:10px;height:90px}
+#touch i{position:absolute;width:18px;height:18px;margin:-9px;border-radius:50%;background:var(--acc);display:none}
+.leds label{margin-right:10px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="hdr"><h1>🎮 PS5 Controller Tester</h1><button class="sec" id="resetLayout" title="Restore default card order and sizes">Reset layout</button></div>
+
+<div class="grid" id="board">
+<div class="card">
+  <h2>Environment</h2>
+  <div class="badges" id="env"></div>
+  <div class="note" id="envnote"></div>
+  <div style="margin-top:8px">
+    <button id="btnHid">Connect via WebHID (battery · haptics · triggers · lightbar)</button>
+  </div>
+  <div class="note">Gamepad API: <b id="gpid">no controller detected – press any button</b></div>
+</div>
+
+<div class="card" id="battcard" hidden>
+  <h2>Battery</h2>
+  <div class="batt" id="battv">—</div>
+  <div class="bar" style="margin-top:6px"><i id="battbar" style="background:var(--ok)"></i></div>
+</div>
+
+  <div class="card">
+    <h2>Buttons <button class="sec" id="reset" style="float:right;margin:-6px 0 0">Reset tested</button></h2>
+    <div class="chips" id="chips"></div>
+    <div class="note">Blue = pressed now · green outline = pressed at least once.</div>
+  </div>
+
+  <div class="card">
+    <h2>Sticks</h2>
+    <div class="sticks">
+      <div class="stick"><canvas id="cl" width="150" height="150"></canvas><div id="tl">L: 0.00, 0.00</div><div id="ml">max: 0.00</div></div>
+      <div class="stick"><canvas id="cr" width="150" height="150"></canvas><div id="tr">R: 0.00, 0.00</div><div id="mr">max: 0.00</div></div>
+    </div>
+    <div class="row" style="margin-top:12px"><label>L2</label><div class="bar"><i id="bl2"></i></div><span class="v" id="vl2">0%</span></div>
+    <div class="row"><label>R2</label><div class="bar"><i id="br2"></i></div><span class="v" id="vr2">0%</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Stick drift &amp; circularity</h2>
+    <div class="note" style="margin:0 0 8px">Rest test: let go of both sticks, press Start and keep still for 5 s. Zoomed view is &plusmn;25% of travel; the dashed circle is a 10% dead zone.</div>
+    <div class="sticks">
+      <div class="stick"><canvas id="zl" width="150" height="150"></canvas><div id="dl">L: –</div></div>
+      <div class="stick"><canvas id="zr" width="150" height="150"></canvas><div id="dr">R: –</div></div>
+    </div>
+    <div style="margin-top:8px"><button id="dStart">Start rest test (5 s)</button><button class="sec" id="dClear">Clear</button></div>
+    <div class="note" id="dres">No result yet.</div>
+    <h2 style="margin-top:16px">Circularity (rotate each stick around its edge)</h2>
+    <div class="sticks">
+      <div class="stick"><canvas id="ol" width="150" height="150"></canvas><div id="oll">L: –</div></div>
+      <div class="stick"><canvas id="or" width="150" height="150"></canvas><div id="orl">R: –</div></div>
+    </div>
+    <button class="sec" id="oClear">Clear circles</button>
+    <div class="note">Edge outline is the furthest travel recorded in each direction; a worn or damaged stick shows dents or gaps. Rest offset up to ~5% is normal, 5–10% is minor drift, above 10% is drift.</div>
+  </div>
+
+  <div class="card">
+    <h2>Vibration / rumble</h2>
+    <div class="row"><label>Strong</label><input type="range" id="rs" min="0" max="100" value="100"><span class="v" id="rsv">100%</span></div>
+    <div class="row"><label>Weak</label><input type="range" id="rw" min="0" max="100" value="100"><span class="v" id="rwv">100%</span></div>
+    <div class="row"><label>Duration</label><input type="range" id="rd" min="100" max="3000" step="100" value="800"><span class="v" id="rdv">800ms</span></div>
+    <button id="vBoth">Rumble</button>
+    <button id="vStrong" class="sec">Strong only</button>
+    <button id="vWeak" class="sec">Weak only</button>
+    <button id="vPat" class="sec">Pattern</button>
+    <button id="vStop" class="bad">Stop</button>
+    <div class="note" id="vnote"></div>
+  </div>
+
+  <div class="card">
+    <h2>Adaptive triggers (WebHID only)</h2>
+    <div class="row"><label>Trigger</label>
+      <select id="tSide"><option value="both">Both</option><option value="L">L2</option><option value="R">R2</option></select>
+      <select id="tMode"><option value="0">Off</option><option value="1">Rigid</option><option value="2">Pulse</option></select>
+    </div>
+    <div class="row"><label>Start</label><input type="range" id="tStart" min="0" max="9" value="3"></div>
+    <div class="row"><label>Force</label><input type="range" id="tForce" min="0" max="255" value="200"></div>
+    <button id="tApply" class="sec">Apply</button><button id="tOff" class="sec">Off</button>
+    <div class="note">Squeeze L2/R2 after applying. Experimental – parameters vary by effect.</div>
+  </div>
+
+  <div class="card">
+    <h2>Lightbar &amp; player LEDs (WebHID only)</h2>
+    <div class="row"><label>Colour</label><input type="color" id="lcol" value="#0044ff"></div>
+    <div class="leds" id="leds"></div>
+    <button id="lApply" class="sec" style="margin-top:8px">Apply</button>
+  </div>
+
+  <div class="card">
+    <h2>Touchpad (WebHID only)</h2>
+    <div id="touch"><i></i><i></i></div>
+    <div class="note" id="tpnote">—</div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const NAMES = ['Cross ✕','Circle ○','Square □','Triangle △','L1','R1','L2','R2','Create','Options','L3','R3','D-Up','D-Down','D-Left','D-Right','PS','Touchpad','Mute'];
+const tested = new Set();
+const maxDef = {l:0, r:0};
+let hid = null, hidBT = false, hidLast = 0, btSeq = 0;
+let norm = null; // {axes:[lx,ly,rx,ry], l2, r2, btn:[bool], src}
+
+/* ---------- UI scaffolding ---------- */
+const chips = NAMES.map((n,i) => { const d=document.createElement('div'); d.className='chip'; d.textContent=n; $('#chips').append(d); return d; });
+$('#leds').insertAdjacentHTML('beforeend',`<label><input type="radio" name="led" data-led="-1" checked> Off</label>`);
+for (let i=0;i<5;i++) $('#leds').insertAdjacentHTML('beforeend',`<label><input type="radio" name="led" data-led="${i}"> ${i+1}</label>`);
+$('#reset').onclick = () => { tested.clear(); maxDef.l = maxDef.r = 0; };
+[['rs','rsv','%'],['rw','rwv','%'],['rd','rdv','ms']].forEach(([a,b,u]) => $('#'+a).oninput = () => $('#'+b).textContent = $('#'+a).value+u);
+
+const badge = (t, on) => `<span class="badge ${on?'on':'off'}">${t}</span>`;
+function env(){
+  const hasHid = 'hid' in navigator, secure = window.isSecureContext;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  $('#env').innerHTML = badge('Gamepad API', 'getGamepads' in navigator) + badge('WebHID', hasHid) + badge('Secure context', secure) + badge('Rumble API: '+(rumbleSupported()?'yes':'unknown'), rumbleSupported());
+  let n = '';
+  if (ios) n = 'iOS detected: Chrome on iOS uses WebKit, so WebHID, battery, haptics/rumble and adaptive triggers are NOT available. Only button/stick/trigger testing works, and only for a controller paired to this iPhone/iPad itself (Settings → Bluetooth), not one connected to a PC.';
+  else if (!hasHid) n = 'WebHID unavailable here – use desktop Chrome/Edge over https:// or http://localhost.';
+  else if (!secure) n = 'WebHID needs a secure context: open via http://localhost:PORT on the PC (not the LAN IP).';
+  $('#envnote').textContent = n;
+  $('#btnHid').disabled = !hasHid || !secure;
+}
+function rumbleSupported(){
+  const g = getGP(); return !!(g && (g.vibrationActuator || (g.hapticActuators && g.hapticActuators.length))) || !!hid;
+}
+
+/* ---------- Gamepad API ---------- */
+function getGP(){
+  const l = (navigator.getGamepads ? [...navigator.getGamepads()] : []).filter(Boolean);
+  return l.find(g => /054c|dualsense|wireless controller|playstation/i.test(g.id)) || l[0] || null;
+}
+addEventListener('gamepadconnected', env);
+addEventListener('gamepaddisconnected', env);
+
+function fromGamepad(g){
+  const b = i => g.buttons[i] ? g.buttons[i].pressed || g.buttons[i].value>0.5 : false;
+  const v = i => g.buttons[i] ? g.buttons[i].value : 0;
+  const btn = NAMES.map((_,i) => b(i));
+  return { src:'gamepad', axes:[g.axes[0]||0,g.axes[1]||0,g.axes[2]||0,g.axes[3]||0], l2:v(6), r2:v(7), btn };
+}
+
+/* ---------- Render loop ---------- */
+function drawStick(c, x, y){
+  const ctx = c.getContext('2d'), w=c.width, r=w/2-6;
+  ctx.clearRect(0,0,w,w);
+  ctx.strokeStyle='#2c375a'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(w/2,w/2,r,0,7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6,w/2); ctx.lineTo(w-6,w/2); ctx.moveTo(w/2,6); ctx.lineTo(w/2,w-6); ctx.stroke();
+  ctx.beginPath(); ctx.arc(w/2,w/2,r*0.1,0,7); ctx.stroke();
+  ctx.fillStyle='#4da3ff'; ctx.beginPath(); ctx.arc(w/2+x*r, w/2+y*r, 9, 0, 7); ctx.fill();
+}
+
+/* ---------- Drift / circularity ---------- */
+const DZ = 0.10, ZOOM = 0.25, BUCKETS = 72;
+const drift = { active:false, t0:0, s:[[],[]], trail:[[],[]], last:[null,null] };
+const edge = [new Array(BUCKETS).fill(0), new Array(BUCKETS).fill(0)];
+function drawZoom(id, pts, cur){
+  const c=$(id), ctx=c.getContext('2d'), w=c.width, r=w/2-6;
+  ctx.clearRect(0,0,w,w);
+  ctx.strokeStyle='#2c375a'; ctx.lineWidth=1; ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(w/2,w/2,r,0,7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6,w/2); ctx.lineTo(w-6,w/2); ctx.moveTo(w/2,6); ctx.lineTo(w/2,w-6); ctx.stroke();
+  ctx.strokeStyle='#f5c211'; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.arc(w/2,w/2,r*DZ/ZOOM,0,7); ctx.stroke(); ctx.setLineDash([]);
+  const px=v=>w/2+Math.max(-ZOOM,Math.min(ZOOM,v))/ZOOM*r;
+  ctx.fillStyle='rgba(77,163,255,.35)';
+  for (const [x,y] of pts){ ctx.fillRect(px(x)-1,px(y)-1,2,2); }
+  ctx.fillStyle='#33d17a'; ctx.beginPath(); ctx.arc(px(cur[0]),px(cur[1]),4,0,7); ctx.fill();
+}
+function drawEdge(id, arr){
+  const c=$(id), ctx=c.getContext('2d'), w=c.width, r=w/2-6;
+  ctx.clearRect(0,0,w,w);
+  ctx.strokeStyle='#2c375a'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(w/2,w/2,r,0,7); ctx.stroke();
+  ctx.strokeStyle='#4da3ff'; ctx.lineWidth=2; ctx.beginPath();
+  arr.forEach((v,i)=>{ const a=i/BUCKETS*Math.PI*2, rr=Math.min(1,v)*r; const x=w/2+Math.cos(a)*rr, y=w/2+Math.sin(a)*rr; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+  ctx.closePath(); ctx.stroke();
+}
+function driftTick(sticks){
+  sticks.forEach(([x,y],i)=>{
+    drift.last[i]=[x,y];
+    if (drift.active){ drift.s[i].push([x,y]); }
+    const m=Math.hypot(x,y);
+    if (m>0.5){ const b=Math.floor(((Math.atan2(y,x)+Math.PI*2)%(Math.PI*2))/(Math.PI*2)*BUCKETS)%BUCKETS; edge[i][b]=Math.max(edge[i][b],m); }
+  });
+  drawZoom('#zl', drift.s[0], sticks[0]); drawZoom('#zr', drift.s[1], sticks[1]);
+  $('#dl').textContent=`L: ${(sticks[0][0]*100).toFixed(1)}%, ${(sticks[0][1]*100).toFixed(1)}%`;
+  $('#dr').textContent=`R: ${(sticks[1][0]*100).toFixed(1)}%, ${(sticks[1][1]*100).toFixed(1)}%`;
+  drawEdge('#ol', edge[0]); drawEdge('#or', edge[1]);
+  [['#oll','L',0],['#orl','R',1]].forEach(([sel,n,i])=>{
+    const seen=edge[i].filter(v=>v>0), gaps=BUCKETS-seen.length;
+    $(sel).textContent = seen.length ? `${n}: min ${(Math.min(...seen)*100).toFixed(0)}%, max ${(Math.max(...seen)*100).toFixed(0)}%, ${gaps?gaps+' of '+BUCKETS+' directions not covered':'full circle'}` : n+': –';
+  });
+  if (drift.active){
+    const left=5000-(performance.now()-drift.t0);
+    $('#dres').textContent = `Sampling… keep sticks untouched (${Math.max(0,left/1000).toFixed(1)} s)`;
+    if (left<=0) finishDrift();
+  }
+}
+function finishDrift(){
+  drift.active=false; $('#dStart').disabled=false;
+  const out=['L','R'].map((n,i)=>{
+    const s=drift.s[i]; if(!s.length) return n+': no data';
+    const mx=s.reduce((a,p)=>a+p[0],0)/s.length, my=s.reduce((a,p)=>a+p[1],0)/s.length;
+    const off=Math.hypot(mx,my);
+    const jit=Math.sqrt(s.reduce((a,p)=>a+(p[0]-mx)**2+(p[1]-my)**2,0)/s.length);
+    const peak=Math.max(...s.map(p=>Math.hypot(p[0],p[1])));
+    const v = peak>0.5 ? '⚠ stick was moved – redo' : off>0.10 ? '❌ drift' : off>0.05 ? '⚠ minor drift' : '✅ OK';
+    return `${n}: ${v} — offset ${(off*100).toFixed(1)}% (x ${(mx*100).toFixed(1)}, y ${(my*100).toFixed(1)}), jitter ${(jit*100).toFixed(2)}%, peak ${(peak*100).toFixed(1)}%, ${s.length} samples`;
+  });
+  $('#dres').innerHTML = out.join('<br>');
+}
+$('#dStart').onclick=()=>{ if(!norm){ $('#dres').textContent='No controller input yet – press a button first.'; return; } drift.s=[[],[]]; drift.t0=performance.now(); drift.active=true; $('#dStart').disabled=true; };
+$('#dClear').onclick=()=>{ drift.active=false; drift.s=[[],[]]; $('#dStart').disabled=false; $('#dres').textContent='No result yet.'; };
+$('#oClear').onclick=()=>{ edge.forEach(a=>a.fill(0)); };
+
+function frame(){
+  const g = getGP();
+  const useHid = hid && performance.now()-hidLast < 500;
+  if (useHid) norm = hidNorm;
+  else if (g) norm = fromGamepad(g);
+  else norm = null;
+  $('#gpid').textContent = g ? g.id + (useHid ? '  (UI driven by WebHID)' : '') : (useHid ? 'none (using WebHID)' : 'no controller detected – press any button');
+  if (norm){
+    norm.btn.forEach((p,i) => { chips[i].classList.toggle('down', p); if (p) tested.add(i); chips[i].classList.toggle('tested', tested.has(i)); });
+    const [lx,ly,rx,ry] = norm.axes;
+    drawStick($('#cl'),lx,ly); drawStick($('#cr'),rx,ry);
+    maxDef.l = Math.max(maxDef.l, Math.hypot(lx,ly)); maxDef.r = Math.max(maxDef.r, Math.hypot(rx,ry));
+    $('#tl').textContent = `L: ${lx.toFixed(2)}, ${ly.toFixed(2)}`; $('#tr').textContent = `R: ${rx.toFixed(2)}, ${ry.toFixed(2)}`;
+    $('#ml').textContent = 'max: '+maxDef.l.toFixed(2); $('#mr').textContent = 'max: '+maxDef.r.toFixed(2);
+    driftTick([[lx,ly],[rx,ry]]);
+    $('#bl2').style.width = norm.l2*100+'%'; $('#br2').style.width = norm.r2*100+'%';
+    $('#vl2').textContent = Math.round(norm.l2*100)+'%'; $('#vr2').textContent = Math.round(norm.r2*100)+'%';
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Vibration (HID if connected, else Gamepad API) ---------- */
+let rumbleTimer;
+async function rumble(strong, weak, ms){
+  clearTimeout(rumbleTimer);
+  if (hid){
+    out.right = Math.round(weak*255); out.left = Math.round(strong*255); await sendOut();
+    rumbleTimer = setTimeout(() => { out.right = out.left = 0; sendOut(); }, ms);
+    return;
+  }
+  const g = getGP(); const a = g && g.vibrationActuator;
+  if (a && a.playEffect){
+    try { await a.playEffect('dual-rumble',{startDelay:0,duration:ms,weakMagnitude:weak,strongMagnitude:strong}); $('#vnote').textContent=''; }
+    catch(e){ $('#vnote').textContent = 'Rumble failed: '+e.message; }
+  } else if (g && g.hapticActuators && g.hapticActuators[0]){
+    g.hapticActuators[0].pulse(Math.max(strong,weak), ms);
+  } else $('#vnote').textContent = 'No rumble support on this browser/controller combo. Connect via WebHID on desktop Chrome/Edge (iOS WebKit does not expose rumble).';
+}
+const gv = () => [$('#rs').value/100, $('#rw').value/100, +$('#rd').value];
+$('#vBoth').onclick  = () => { const [s,w,d]=gv(); rumble(s,w,d); };
+$('#vStrong').onclick= () => { const [s,,d]=gv(); rumble(s,0,d); };
+$('#vWeak').onclick  = () => { const [,w,d]=gv(); rumble(0,w,d); };
+$('#vPat').onclick   = async () => { for (let i=0;i<4;i++){ await rumble(1,0,150); await new Promise(r=>setTimeout(r,300)); await rumble(0,1,150); await new Promise(r=>setTimeout(r,300)); } };
+$('#vStop').onclick  = async () => { clearTimeout(rumbleTimer); if (hid){ out.right=out.left=0; sendOut(); } else { const a=getGP()?.vibrationActuator; if (a&&a.reset) a.reset(); } };
+
+/* ---------- WebHID / DualSense ---------- */
+const hidNorm = { src:'hid', axes:[0,0,0,0], l2:0, r2:0, btn:new Array(19).fill(false) };
+const out = { right:0, left:0, r:0, g:68, b:255, player:0, trigL:[0,0,0], trigR:[0,0,0], trigDirty:false };
+
+$('#btnHid').onclick = async () => {
+  try {
+    const [d] = await navigator.hid.requestDevice({ filters:[{vendorId:0x054c,productId:0x0ce6},{vendorId:0x054c,productId:0x0df2}] });
+    if (d) await openHid(d);
+  } catch(e){ alert('WebHID: '+e.message); }
+};
+if ('hid' in navigator){
+  navigator.hid.getDevices().then(l => { const d=l.find(x=>x.vendorId===0x054c); if (d) openHid(d); });
+  navigator.hid.addEventListener('disconnect', e => { if (e.device===hid){ hid=null; $('#battv').textContent='—'; $('#battbar').style.width='0'; showBatt(false); } });
+}
+async function openHid(d){
+  if (!d.opened) await d.open();
+  hid = d;
+  const ids = (d.collections[0]?.outputReports||[]).map(r=>r.reportId);
+  hidBT = ids.includes(0x31) && !ids.includes(0x02);
+  if (hidBT) { try { await d.receiveFeatureReport(0x05); } catch(e){} }
+  d.oninputreport = onReport;
+  $('#btnHid').textContent = `Connected: ${d.productName} (${hidBT?'Bluetooth':'USB'})`;
+  env();
+}
+function showBatt(on){ if (on === battOn) return; $('#battcard').hidden = !on; battOn = on; buildLayout(); render(); }
+
+/* ---------- Grafana-style panel grid: drag by header, resize from corner, vertical compaction ---------- */
+const board = $('#board');
+const CARD_IDS = ['env','batt','buttons','sticks','drift','vib','trig','led','touch'];
+const DEF_W = {
+  12: {env:12,batt:4,buttons:4,sticks:4,drift:8,vib:4,trig:4,led:4,touch:4},
+  6:  {env:6,batt:3,buttons:3,sticks:3,drift:6,vib:3,trig:3,led:3,touch:3}
+};
+const LKEY = 'ps5tester.layout.v2';
+const GAP = 12, ROW = 30;
+let battOn = false, saved = {}, N = 12, L = [];
+try { saved = JSON.parse(localStorage.getItem(LKEY)) || {}; } catch(e) {}
+const cards = [...board.querySelectorAll(':scope > .card')];
+cards.forEach((c,i) => c.dataset.id = CARD_IDS[i]);
+const byId = Object.fromEntries(cards.map(c => [c.dataset.id, c]));
+const colsFor = () => innerWidth < 700 ? 1 : innerWidth < 1000 ? 6 : 12;
+const colW = () => (board.clientWidth - (N-1)*GAP) / N;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const px = it => ({x: it.x*(colW()+GAP), y: it.y*(ROW+GAP), w: it.w*colW()+(it.w-1)*GAP, h: it.h*ROW+(it.h-1)*GAP});
+const hit = (a, b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+
+// Pull every item up as far as possible; `fixed` keeps its position and the others flow around it.
+function compact(items, fixed){
+  const placed = fixed ? [fixed] : [];
+  items.filter(i => i !== fixed).sort((a,b) => a.y-b.y || a.x-b.x).forEach(it => {
+    while (it.y > 0 && !placed.some(p => hit({...it, y: it.y-1}, p))) it.y--;
+    while (placed.some(p => hit(it, p))) it.y++;
+    placed.push(it);
+  });
+}
+function fitHeight(it){
+  const c = byId[it.id], p = px(it);
+  c.style.width = p.w + 'px'; c.style.height = 'auto';
+  it.h = Math.max(2, Math.ceil((c.offsetHeight + GAP) / (ROW + GAP)));
+}
+function defaultWidth(id){
+  if (N === 1) return 1;
+  return id === 'env' && battOn ? (N === 12 ? 8 : 3) : DEF_W[N][id];
+}
+function buildLayout(){
+  N = colsFor();
+  const vis = cards.filter(c => !c.hidden).map(c => c.dataset.id);
+  const s = saved[N];
+  if (s) {
+    L = vis.filter(id => s[id]).map(id => { const w = clamp(s[id].w, 1, N); return {id, x: clamp(s[id].x, 0, N-w), y: s[id].y, w, h: s[id].h}; });
+    vis.filter(id => !s[id]).forEach(id => {
+      const w = defaultWidth(id), it = {id, x: Math.max(0, N-w), y: 0, w, h: 2};
+      fitHeight(it); L.push(it); compact(L, it);
+    });
+    compact(L);
+    return;
+  }
+  L = [];
+  vis.forEach(id => {
+    const it = {id, x: 0, y: 0, w: defaultWidth(id), h: 2};
+    fitHeight(it);
+    search: for (let y = 0; ; y++) for (let x = 0; x <= N - it.w; x++) {
+      it.x = x; it.y = y;
+      if (!L.some(p => hit(it, p))) break search;
+    }
+    L.push(it);
+  });
+  compact(L);
+}
+function render(skip){
+  L.forEach(it => {
+    const c = byId[it.id], p = px(it);
+    if (c === skip) return;
+    c.style.width = p.w + 'px'; c.style.height = p.h + 'px';
+    c.style.transform = `translate(${p.x}px,${p.y}px)`;
+  });
+  const rows = Math.max(0, ...L.map(i => i.y + i.h));
+  board.style.height = Math.max(0, rows*(ROW+GAP) - GAP) + 'px';
+}
+function saveLayout(){
+  const s = saved[N] = saved[N] || {};
+  L.forEach(i => s[i.id] = {x: i.x, y: i.y, w: i.w, h: i.h});
+  try { localStorage.setItem(LKEY, JSON.stringify(saved)); } catch(e) {}
+}
+
+function startInteraction(c, mode, e){
+  e.preventDefault();
+  const el = e.currentTarget;
+  el.setPointerCapture(e.pointerId);
+  const base = L.map(i => ({...i})), id = c.dataset.id;
+  const it0 = base.find(i => i.id === id), p0 = px(it0);
+  const sx = e.clientX, sy = e.clientY, sc = scrollY;
+  let cx = sx, cy = sy, raf = 0;
+  const ph = document.createElement('div');
+  ph.className = 'ph'; board.append(ph);
+  c.classList.add('moving');
+  const place = t => {
+    const p = px(t);
+    ph.style.width = p.w + 'px'; ph.style.height = p.h + 'px';
+    ph.style.transform = `translate(${p.x}px,${p.y}px)`;
+  };
+  place(it0);
+  const update = () => {
+    const dx = cx - sx, dy = cy - sy + (scrollY - sc), cw = colW();
+    const T = base.map(i => ({...i})), t = T.find(i => i.id === id);
+    if (mode === 'move') {
+      const left = p0.x + dx, top = p0.y + dy;
+      c.style.transform = `translate(${left}px,${top}px)`;
+      t.x = clamp(Math.round(left / (cw+GAP)), 0, N - t.w);
+      t.y = Math.max(0, Math.round(top / (ROW+GAP)));
+    } else {
+      const w = Math.max(cw, p0.w + dx), h = Math.max(ROW*2 + GAP, p0.h + dy);
+      c.style.width = w + 'px'; c.style.height = h + 'px';
+      t.w = clamp(Math.round((w+GAP) / (cw+GAP)), Math.min(2, N - t.x), N - t.x);
+      t.h = Math.max(2, Math.round((h+GAP) / (ROW+GAP)));
+    }
+    compact(T, t);
+    L = T; render(c); place(t);
+  };
+  const move = ev => { cx = ev.clientX; cy = ev.clientY; update(); };
+  const tick = () => {
+    const before = scrollY;
+    if (cy < 70) scrollBy(0, -14); else if (cy > innerHeight - 70) scrollBy(0, 14);
+    if (scrollY !== before) update();
+    raf = requestAnimationFrame(tick);
+  };
+  const up = () => {
+    cancelAnimationFrame(raf);
+    ['pointermove','pointerup','pointercancel'].forEach((n, i) => el.removeEventListener(n, [move, up, up][i]));
+    ph.remove(); c.classList.remove('moving');
+    compact(L);
+    render(); saveLayout();
+  };
+  el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  raf = requestAnimationFrame(tick);
+}
+
+cards.forEach(c => {
+  const h2 = c.querySelector('h2');
+  const grip = document.createElement('span');
+  grip.className = 'grip'; grip.textContent = '⋮⋮'; grip.title = 'Drag the header to move';
+  h2.prepend(grip);
+  const rz = document.createElement('i'); rz.className = 'rz'; rz.title = 'Drag to resize · double-click to fit content';
+  c.append(rz);
+  h2.addEventListener('pointerdown', e => {
+    if (e.button > 0 || e.target.closest('button,input,select,a')) return;
+    startInteraction(c, 'move', e);
+  });
+  rz.addEventListener('pointerdown', e => startInteraction(c, 'size', e));
+  rz.addEventListener('dblclick', () => {
+    const it = L.find(i => i.id === c.dataset.id);
+    fitHeight(it); compact(L); render(); saveLayout();
+  });
+});
+$('#resetLayout').onclick = () => {
+  saved = {};
+  try { localStorage.removeItem(LKEY); } catch(e) {}
+  buildLayout(); render();
+};
+addEventListener('resize', () => { if (colsFor() !== N) buildLayout(); render(); });
+buildLayout(); render();
+
+function onReport(e){
+  const d = e.data;
+  let o, simple = false;
+  if (e.reportId === 0x31) o = 1;
+  else if (e.reportId === 0x01 && d.byteLength >= 50) o = 0;
+  else if (e.reportId === 0x01) { o = 0; simple = true; }
+  else return;
+  const u = i => d.getUint8(o+i);
+  const bi = simple ? 4 : 7;
+  const l2 = u(simple?7:4), r2 = u(simple?8:5);
+  const b0 = u(bi), b1 = u(bi+1), b2 = u(bi+2);
+  const hat = b0 & 0x0f;
+  const B = hidNorm.btn;
+  B[0]=!!(b0&0x20); B[1]=!!(b0&0x40); B[2]=!!(b0&0x10); B[3]=!!(b0&0x80);
+  B[4]=!!(b1&1); B[5]=!!(b1&2); B[6]=!!(b1&4)||l2>200; B[7]=!!(b1&8)||r2>200;
+  B[8]=!!(b1&0x10); B[9]=!!(b1&0x20); B[10]=!!(b1&0x40); B[11]=!!(b1&0x80);
+  B[12]=[0,1,7].includes(hat); B[13]=[3,4,5].includes(hat); B[14]=[5,6,7].includes(hat); B[15]=[1,2,3].includes(hat);
+  B[16]=!!(b2&1); B[17]=!!(b2&2); B[18]=!!(b2&4);
+  hidNorm.axes = [0,1,2,3].map(i => (u(i)-127.5)/127.5);
+  hidNorm.l2 = l2/255; hidNorm.r2 = r2/255;
+  hidLast = performance.now();
+  if (!simple){
+    const st = u(52), lvl = st & 0x0f, chg = st >> 4;
+    let pct = Math.min(lvl*10+5,100), label = chg===1 ? 'Charging' : chg===2 ? 'Fully charged' : chg===0 ? 'Discharging' : 'Status '+chg;
+    if (chg===2) pct = 100;
+    showBatt(true);
+    if (chg===0xa || chg===0xb) { $('#battv').textContent='Error'; }
+    else {
+      $('#battv').textContent = pct+'%  ·  '+label;
+      const bar = $('#battbar'); bar.style.width = pct+'%'; bar.style.background = pct<20?'var(--bad)':pct<50?'var(--warn)':'var(--ok)';
+    }
+    const tp = [32,36].map(k => { const t=u(k); return { on: !(t&0x80), x: u(k+1)|((u(k+2)&0x0f)<<8), y:(u(k+2)>>4)|(u(k+3)<<4) }; });
+    const dots = document.querySelectorAll('#touch i');
+    tp.forEach((p,i) => { dots[i].style.display = p.on ? 'block':'none'; dots[i].style.left = p.x/1920*100+'%'; dots[i].style.top = p.y/1080*100+'%'; });
+    $('#tpnote').textContent = tp.map((p,i)=>p.on?`finger ${i+1}: ${p.x}, ${p.y}`:'').filter(Boolean).join(' | ') || 'no touch';
+  }
+}
+
+/* ---- output reports ---- */
+const crcT = (()=>{ const t=new Uint32Array(256); for(let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c = c&1 ? (c>>>1)^0xEDB88320 : c>>>1; t[i]=c>>>0; } return t; })();
+function crc32(bytes){ let c=0xFFFFFFFF; for (const b of bytes) c = crcT[(c^b)&0xff]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+
+async function sendOut(){
+  if (!hid) return;
+  const c = new Uint8Array(47);
+  c[0] = 0x01|0x02|0x04|0x08;           // rumble, haptics select, R2 trigger, L2 trigger
+  c[1] = 0x04|0x10;                     // lightbar + player LEDs
+  c[2] = out.right; c[3] = out.left;
+  c[10] = out.trigR[0]; c[11] = out.trigR[1]; c[12] = out.trigR[2]; c[13] = out.trigR[3] ?? 0;
+  c[21] = out.trigL[0]; c[22] = out.trigL[1]; c[23] = out.trigL[2]; c[24] = out.trigL[3] ?? 0;
+  c[38] = 0x02; c[41] = 0x02; c[42] = 0x00;   // lightbar setup enable, no fade, full brightness
+  c[43] = out.player; c[44] = out.r; c[45] = out.g; c[46] = out.b;
+  try {
+    if (!hidBT) {
+      // the report size comes from the descriptor (47 or 62 data bytes depending on OS/driver)
+      const rep = hid.collections.flatMap(k => k.outputReports).find(r => r.reportId === 0x02);
+      const bits = rep ? rep.items.reduce((a,i)=>a+i.reportCount*i.reportSize,0) : 62*8;
+      const buf = new Uint8Array(bits >> 3); buf.set(c.subarray(0, buf.length)); await hid.sendReport(0x02, buf);
+    } else {
+      const buf = new Uint8Array(77); buf[0] = (btSeq++ & 0x0f) << 4; buf[1] = 0x10; buf.set(c, 2);
+      const crcIn = new Uint8Array(2+73); crcIn[0]=0xA2; crcIn[1]=0x31; crcIn.set(buf.subarray(0,73),2);
+      const crc = crc32(crcIn); new DataView(buf.buffer).setUint32(73, crc, true);
+      await hid.sendReport(0x31, buf);
+    }
+  } catch(e){ console.warn(e); $('#vnote').textContent = 'HID send failed: '+e.message; }
+}
+
+/* triggers: params = [mode, p0, p1, p2] written at trigger block */
+function trigApply(side, mode, start, force){
+  const p = mode===1 ? [1,start*25>>0,force,0] : mode===2 ? [2,start*25>>0,force,0] : [0,0,0,0];
+  // layout in block: mode byte then params; for pulse mode params are (start,end,force)
+  const set = t => { t[0]=p[0]; t[1]=p[1]; t[2]=p[2]; t[3]=p[3]; };
+  if (mode===1) { /* rigid: start, force */ }
+  if (mode===2) { p[1] = start*25>>0; p[2] = Math.min(255,(start*25>>0)+80); p[3] = force; }
+  if (side!=='R') set(out.trigL);
+  if (side!=='L') set(out.trigR);
+  sendOut();
+}
+$('#tApply').onclick = () => trigApply($('#tSide').value, +$('#tMode').value, +$('#tStart').value, +$('#tForce').value);
+$('#tOff').onclick = () => trigApply('both', 0, 0, 0);
+
+$('#lApply').onclick = () => {
+  const h = $('#lcol').value; out.r = parseInt(h.slice(1,3),16); out.g = parseInt(h.slice(3,5),16); out.b = parseInt(h.slice(5,7),16);
+  const sel = +document.querySelector('[data-led]:checked').dataset.led;
+  out.player = sel < 0 ? 0 : [0x04,0x0A,0x15,0x1B,0x1F][sel];
+  sendOut();
+};
+
+env(); frame();
+</script>
+</body>
+</html>
